@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Rate My Teacher</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    form label {
+      display: block;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    input, select, textarea, button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      margin-bottom: 15px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+
+    button {
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    .rating-entry {
+      border-bottom: 1px solid #ddd;
+      padding: 10px 0;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+</head>
+<body>
+  <div class="container">
+    <h1>Rate a Teacher</h1>
+    <p>Please select a teacher and provide your rating and comments.</p>
+    <p>Note: Ratings are anonymous and will be displayed publicly.</p>
+
+<form id="ratingForm">
+  <label for="teacherSearch">Search Teacher:</label>
+  <input type="text" id="teacherSearch" placeholder="Type to search...">
+
+  <label for="teacher">Teacher Name:</label>
+  <select id="teacher" required></select>
+
+  <label for="rating">Rate your teacher (1-5):</label>
+  <select id="rating" required>
+    <option value="">Select</option>
+    <option value="1">1 - Poor</option>
+    <option value="2">2</option>
+    <option value="3">3 - Average</option>
+    <option value="4">4</option>
+    <option value="5">5 - Excellent</option>
+  </select>
+
+  <label for="grade">Grade in the class:</label>
+  <input type="text" id="grade" placeholder="e.g. 89, B+, A, etc." required />
+
+  <label for="comment">Comment:</label>
+  <textarea id="comment" rows="4"></textarea>
+
+  <button type="submit">Submit Rating</button>
+</form>
+
+    <h2>All Ratings</h2>
+    <div id="ratingsList"></div>
+    <h3>Average Rating by Teacher</h3>
+    <div id="averageRatings"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById('ratingForm');
+    const ratingsList = document.getElementById('ratingsList');
+    const averageRatingsDiv = document.getElementById('averageRatings');
+    const teacherSelect = document.getElementById('teacher');
+    const teacherSearch = document.getElementById('teacherSearch');
+
+    let ratings = JSON.parse(localStorage.getItem('ratings')) || [];
+
+    function saveRatings() {
+      localStorage.setItem('ratings', JSON.stringify(ratings));
+    }
+
+    function renderRatings() {
+      ratingsList.innerHTML = '';
+      ratings.forEach((entry) => {
+        const div = document.createElement('div');
+        div.className = 'rating-entry';
+        div.innerHTML = `
+          <strong>${entry.teacher}</strong> - ${entry.rating}/5<br>
+          <em>Grade: ${entry.grade}</em>
+          <p>${entry.comment || "No comment."}</p>
+        `;
+        ratingsList.appendChild(div);
+      });
+    }
+
+    function renderAverageRatings() {
+      const averages = {};
+      const counts = {};
+
+      ratings.forEach(r => {
+        if (!averages[r.teacher]) {
+          averages[r.teacher] = 0;
+          counts[r.teacher] = 0;
+        }
+        averages[r.teacher] += r.rating;
+        counts[r.teacher]++;
+      });
+
+      averageRatingsDiv.innerHTML = '';
+      for (const teacher in averages) {
+        const avg = (averages[teacher] / counts[teacher]).toFixed(2);
+        const p = document.createElement('p');
+        p.textContent = `${teacher}: ${avg}/5`;
+        averageRatingsDiv.appendChild(p);
+      }
+    }
+
+    const teachers = {
+      "Math": ["Tamie Anderson", "Geoffrey Anikienko", "Blane Burge", "Kyle Kachelmeyer", "William Tinney"],
+      "Science": ["Doug Behrens", "Michael Berrier", "Brian Douglas", "Jeremy Griffin"],
+      "English": ["Melissa Buchanan", "Jenna Burkert", "Judee Dysart", "Heather Thatcher"],
+      "History": ["Brent Baldwin", "Dakota Evans", "Jack Hamilton", "Mark Hart"],
+      "Other": ["Dr. Nathan Jones", "Col. Christopher French", "Skylar Goodsell", "Gabrielle Wyre"]
+    };
+
+    function populateTeacherDropdown(filter = '') {
+      teacherSelect.innerHTML = '<option value="">Select a Teacher</option>';
+      for (const dept of Object.keys(teachers).sort()) {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = dept;
+        teachers[dept].sort().forEach(name => {
+          if (!filter || name.toLowerCase().includes(filter.toLowerCase())) {
+            const opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            optgroup.appendChild(opt);
+          }
+        });
+        if (optgroup.children.length > 0) {
+          teacherSelect.appendChild(optgroup);
+        }
+      }
+    }
+
+    teacherSearch.addEventListener('input', () => {
+      populateTeacherDropdown(teacherSearch.value);
+    });
+
+    populateTeacherDropdown();
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const teacher = teacherSelect.value.trim();
+      const rating = document.getElementById('rating').value;
+      const grade = document.getElementById('grade').value.trim();
+      const comment = document.getElementById('comment').value.trim();
+
+      if (!teacher || !rating || !grade) return;
+
+      const newRating = {
+        teacher,
+        rating: parseInt(rating),
+        grade,
+        comment
+      };
+
+      ratings.push(newRating);
+      saveRatings();
+      form.reset();
+      populateTeacherDropdown();
+      renderRatings();
+      renderAverageRatings();
+    });
+
+    renderRatings();
+    renderAverageRatings();
+  </script>
+</body>
+</html>
