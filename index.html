@@ -1,205 +1,143 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Rate My Teacher</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Web-Based Parking Assist</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.20.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      margin: 0;
-      padding: 20px;
-    }
-
-    .container {
-      max-width: 600px;
-      margin: auto;
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-    form label {
-      display: block;
-      margin-top: 10px;
+    body { font-family: Arial; text-align: center; margin: 0; padding: 0; background: #f0f0f0; }
+    canvas { position: absolute; top: 0; left: 0; }
+    video { display: none; }
+    #alertBox {
+      font-size: 5em;
+      margin-top: 20px;
       font-weight: bold;
+      color: #333;
     }
-
-    input, select, textarea, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      margin-bottom: 15px;
-      border-radius: 4px;
-      border: 1px solid #ccc;
+    #statusBox {
+      font-size: 1.2em;
+      margin-top: 10px;
+      color: #666;
     }
-
-    button {
-      background-color: #4CAF50;
-      color: white;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background-color: #45a049;
-    }
-
-    .rating-entry {
-      border-bottom: 1px solid #ddd;
-      padding: 10px 0;
+    #alertBox img {
+      width: 150px;
+      height: 150px;
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
 </head>
 <body>
-  <div class="container">
-    <h1>Rate a Teacher</h1>
-    <p>Please select a teacher and provide your rating and comments.</p>
-    <p>Note: Ratings are anonymous and will be displayed publicly.</p>
-
-<form id="ratingForm">
-  <label for="teacherSearch">Search Teacher:</label>
-  <input type="text" id="teacherSearch" placeholder="Type to search...">
-
-  <label for="teacher">Teacher Name:</label>
-  <select id="teacher" required></select>
-
-  <label for="rating">Rate your teacher (1-5):</label>
-  <select id="rating" required>
-    <option value="">Select</option>
-    <option value="1">1 - Poor</option>
-    <option value="2">2</option>
-    <option value="3">3 - Average</option>
-    <option value="4">4</option>
-    <option value="5">5 - Excellent</option>
-  </select>
-
-  <label for="grade">Grade in the class:</label>
-  <input type="text" id="grade" placeholder="e.g. 89, B+, A, etc." required />
-
-  <label for="comment">Comment:</label>
-  <textarea id="comment" rows="4"></textarea>
-
-  <button type="submit">Submit Rating</button>
-</form>
-
-    <h2>All Ratings</h2>
-    <div id="ratingsList"></div>
-    <h3>Average Rating by Teacher</h3>
-    <div id="averageRatings"></div>
-  </div>
+  <h1>🚗 Parking Assist System</h1>
+  <video id="video" width="640" height="480" autoplay muted></video>
+  <canvas id="canvas" width="640" height="480"></canvas>
+  <div id="distance"></div>
+  <div id="alertBox">Requesting camera access...</div>
+  <div id="statusBox"></div>
 
   <script>
-    const form = document.getElementById('ratingForm');
-    const ratingsList = document.getElementById('ratingsList');
-    const averageRatingsDiv = document.getElementById('averageRatings');
-    const teacherSelect = document.getElementById('teacher');
-    const teacherSearch = document.getElementById('teacherSearch');
+    const KNOWN_WIDTH = 150.0; // cm
+    let FOCAL_LENGTH = 600; // Default, can be recalibrated
+    let distances = [];
 
-    let ratings = JSON.parse(localStorage.getItem('ratings')) || [];
-
-    function saveRatings() {
-      localStorage.setItem('ratings', JSON.stringify(ratings));
+    function smoothDistance(newDistance) {
+      distances.push(newDistance);
+      if (distances.length > 10) distances.shift();
+      return distances.reduce((a, b) => a + b, 0) / distances.length;
     }
 
-    function renderRatings() {
-      ratingsList.innerHTML = '';
-      ratings.forEach((entry) => {
-        const div = document.createElement('div');
-        div.className = 'rating-entry';
-        div.innerHTML = `
-          <strong>${entry.teacher}</strong> - ${entry.rating}/5<br>
-          <em>Grade: ${entry.grade}</em>
-          <p>${entry.comment || "No comment."}</p>
-        `;
-        ratingsList.appendChild(div);
-      });
-    }
-
-    function renderAverageRatings() {
-      const averages = {};
-      const counts = {};
-
-      ratings.forEach(r => {
-        if (!averages[r.teacher]) {
-          averages[r.teacher] = 0;
-          counts[r.teacher] = 0;
-        }
-        averages[r.teacher] += r.rating;
-        counts[r.teacher]++;
-      });
-
-      averageRatingsDiv.innerHTML = '';
-      for (const teacher in averages) {
-        const avg = (averages[teacher] / counts[teacher]).toFixed(2);
-        const p = document.createElement('p');
-        p.textContent = `${teacher}: ${avg}/5`;
-        averageRatingsDiv.appendChild(p);
+    function updateAlert(distanceFt) {
+      const alertBox = document.getElementById("alertBox");
+      if (distanceFt <= 10) {
+        alertBox.innerHTML = '<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Stop_sign_light_red.svg/2048px-Stop_sign_light_red.svg.png" alt="STOP"><br><span style="color:red">STOP</span>';
+      } else if (distanceFt <= 15) {
+        alertBox.innerHTML = '<span style="color:orange; font-size: 6em">🟨<br>SLOW</span>';
+      } else {
+        alertBox.innerHTML = '<span style="color:green; font-size: 6em">🟩<br>GO</span>';
       }
     }
 
-    const teachers = {
-      "Math": ["Tamie Anderson", "Geoffrey Anikienko", "Blane Burge", "Kyle Kachelmeyer", "William Tinney"],
-      "Science": ["Doug Behrens", "Michael Berrier", "Brian Douglas", "Jeremy Griffin"],
-      "English": ["Melissa Buchanan", "Jenna Burkert", "Judee Dysart", "Heather Thatcher"],
-      "History": ["Brent Baldwin", "Dakota Evans", "Jack Hamilton", "Mark Hart"],
-      "Other": ["Dr. Nathan Jones", "Col. Christopher French", "Skylar Goodsell", "Gabrielle Wyre"]
-    };
+    async function run() {
+      const alertBox = document.getElementById("alertBox");
+      const statusBox = document.getElementById("statusBox");
+      const video = document.getElementById("video");
+      const canvas = document.getElementById("canvas");
+      const ctx = canvas.getContext("2d");
+      const distanceDisplay = document.getElementById("distance");
 
-    function populateTeacherDropdown(filter = '') {
-      teacherSelect.innerHTML = '<option value="">Select a Teacher</option>';
-      for (const dept of Object.keys(teachers).sort()) {
-        const optgroup = document.createElement('optgroup');
-        optgroup.label = dept;
-        teachers[dept].sort().forEach(name => {
-          if (!filter || name.toLowerCase().includes(filter.toLowerCase())) {
-            const opt = document.createElement('option');
-            opt.value = name;
-            opt.textContent = name;
-            optgroup.appendChild(opt);
+      try {
+        alertBox.textContent = "Requesting camera access...";
+        statusBox.textContent = "Trying to access webcam...";
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+        await video.play();
+        alertBox.textContent = "Camera access granted. Loading detection model...";
+        statusBox.textContent = "Webcam running. Waiting for model...";
+      } catch (err) {
+        alertBox.textContent = "❌ Camera not found or permission denied.";
+        alertBox.style.color = "red";
+        statusBox.textContent = "Please ensure a camera is connected and allowed.";
+        return;
+      }
+
+      let model;
+      try {
+        model = await cocoSsd.load();
+        alertBox.textContent = "Model loaded. Starting detection...";
+        statusBox.textContent = "Model is ready. Detecting objects...";
+      } catch (err) {
+        alertBox.textContent = "❌ Failed to load detection model.";
+        alertBox.style.color = "red";
+        statusBox.textContent = "Could not load detection model.";
+        return;
+      }
+
+      function detectFrame() {
+        model.detect(video).then(predictions => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(video, 0, 0);
+
+          let carDetected = false;
+
+          predictions.forEach(prediction => {
+            if ((prediction.class === "car" || prediction.class === "truck") && prediction.score > 0.6) {
+              carDetected = true;
+              const [x, y, width, height] = prediction.bbox;
+              ctx.strokeStyle = "blue";
+              ctx.lineWidth = 2;
+              ctx.strokeRect(x, y, width, height);
+              ctx.fillStyle = "blue";
+              ctx.fillText(prediction.class, x, y > 10 ? y - 5 : 10);
+
+              const distanceCm = (KNOWN_WIDTH * FOCAL_LENGTH) / width;
+              const distanceFt = distanceCm / 30.48;
+              const smoothed = smoothDistance(distanceFt);
+
+              distanceDisplay.textContent = `Distance: ${smoothed.toFixed(2)} ft`;
+              updateAlert(smoothed);
+              statusBox.textContent = "Car detected. Calculating distance...";
+            }
+          });
+
+          if (!carDetected) {
+            alertBox.innerHTML = "🟦<br>Scanning for cars...";
+            alertBox.style.color = "#333";
+            distanceDisplay.textContent = "";
+            statusBox.textContent = "No car detected. Still scanning...";
           }
+
+          requestAnimationFrame(detectFrame);
+        }).catch(err => {
+          alertBox.textContent = "❌ Detection failed.";
+          alertBox.style.color = "red";
+          statusBox.textContent = "Detection error occurred.";
         });
-        if (optgroup.children.length > 0) {
-          teacherSelect.appendChild(optgroup);
-        }
       }
+
+      detectFrame();
     }
 
-    teacherSearch.addEventListener('input', () => {
-      populateTeacherDropdown(teacherSearch.value);
-    });
-
-    populateTeacherDropdown();
-
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-
-      const teacher = teacherSelect.value.trim();
-      const rating = document.getElementById('rating').value;
-      const grade = document.getElementById('grade').value.trim();
-      const comment = document.getElementById('comment').value.trim();
-
-      if (!teacher || !rating || !grade) return;
-
-      const newRating = {
-        teacher,
-        rating: parseInt(rating),
-        grade,
-        comment
-      };
-
-      ratings.push(newRating);
-      saveRatings();
-      form.reset();
-      populateTeacherDropdown();
-      renderRatings();
-      renderAverageRatings();
-    });
-
-    renderRatings();
-    renderAverageRatings();
+    run();
   </script>
 </body>
 </html>
