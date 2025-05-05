@@ -1,143 +1,463 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Web-Based Parking Assist</title>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.20.0/dist/tf.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
-  <style>
-    body { font-family: Arial; text-align: center; margin: 0; padding: 0; background: #f0f0f0; }
-    canvas { position: absolute; top: 0; left: 0; }
-    video { display: none; }
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Mobile-Friendly Parking Assist</title>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background: #f0f0f0; /* Light mode background */
+        color: #333; /* Light mode text color */
+        text-align: center;
+        transition: background 0.3s, color 0.3s; /* Smooth transition */
+    }
+
+    body.dark-mode {
+        background: #121212; /* Dark mode background */
+        color: #f0f0f0; /* Dark mode text color */
+    }
+
+    h1 {
+        margin: 10px 0; /* Reduce the top margin of the heading */
+    }
+
+    #distanceBox, #statusBox {
+        color: inherit; /* Inherit text color from body */
+    }
+
+    #cameraContainer {
+        position: relative;
+        width: 100%;
+        max-width: 480px;
+        margin: 0 auto;
+        background: #000;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+    #video {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+    #canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
     #alertBox {
-      font-size: 5em;
-      margin-top: 20px;
-      font-weight: bold;
-      color: #333;
+        font-size: 3em;
+        margin: 10px 0; /* Reduce the margin */
+        font-weight: bold;
+    }
+    #distanceBox {
+        font-size: 2em;
+        margin: 5px auto; /* Reduce the margin */
+        position: relative;
+        top: -10px; /* Move it higher */
     }
     #statusBox {
-      font-size: 1.2em;
-      margin-top: 10px;
-      color: #666;
+        font-size: 1em;
+        position: relative;
+        top: -20px; /* Move it higher */
     }
-    #alertBox img {
-      width: 150px;
-      height: 150px;
+    @keyframes moveUpDown {
+        0%, 100% {
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(-10px);
+        }
     }
-  </style>
+
+    .animated {
+        animation: moveUpDown 1s infinite;
+    }
+
+    #darkModeToggle {
+        position: fixed;
+        top: 10px;
+        right: 10px;
+        padding: 10px 20px;
+        background: #3498db;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1em;
+        transition: background 0.3s;
+    }
+
+    #darkModeToggle:hover {
+        background: #1d6fa5;
+    }
+
+    #snapshotButton {
+        position: fixed;
+        top: 20px;
+        left: 20px;
+        padding: 10px 20px;
+        background: #4CAF50; /* Green background */
+        color: #fff; /* White text */
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 1em;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        transition: background 0.3s, transform 0.2s;
+    }
+
+    #snapshotButton:hover {
+        background: #45a049; /* Darker green on hover */
+        transform: scale(1.05); /* Slight zoom effect */
+    }
+
+    #snapshotButton:active {
+        transform: scale(0.95); /* Slight shrink effect on click */
+    }
+
+    #gearIcon {
+        font-size: 1.5em;
+        background: #4CAF50;
+        color: #fff;
+        padding: 10px;
+        border-radius: 50%;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        transition: background 0.3s;
+    }
+
+    #gearIcon:hover {
+        background: #45a049;
+    }
+
+    #gearButton:hover {
+        background: #45a049; /* Darker green on hover */
+    }
+
+    #saveSettingsButton:hover {
+        background: #3e8e41; /* Darker green on hover */
+    }
+
+    #settingsPanel {
+        display: none; /* Hidden by default */
+        position: fixed;
+        bottom: 80px; /* Position above the settings button */
+        left: 20px;
+        width: 250px; /* Set a fixed width */
+        background: #fff;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        z-index: 1000;
+    }
+
+    #settingsPanel label {
+        color: black;
+    }
+
+    /* Mobile-specific styles */
+    @media (max-width: 600px) {
+        #cameraContainer {
+            max-width: 100vw;
+            border-radius: 0;
+        }
+        #settingsPanel, #settingsContainer {
+            left: 0 !important;
+            width: 100vw !important;
+            border-radius: 0 !important;
+        }
+        #settingsPanel {
+            bottom: 0 !important;
+        }
+        #darkModeToggle, #snapshotButton, #gearButton {
+            font-size: 1.2em;
+            padding: 12px 24px;
+        }
+        h1 {
+            font-size: 1.3em;
+        }
+    }
+</style>
 </head>
 <body>
-  <h1>🚗 Parking Assist System</h1>
-  <video id="video" width="640" height="480" autoplay muted></video>
-  <canvas id="canvas" width="640" height="480"></canvas>
-  <div id="distance"></div>
-  <div id="alertBox">Requesting camera access...</div>
-  <div id="statusBox"></div>
+    <h1>🚗 Parking Assist System</h1>
+    <div id="cameraContainer">
+        <video id="video" autoplay muted></video>
+        <canvas id="canvas"></canvas>
+    </div>
+    <div id="alertBox">Requesting camera access...</div>
+    <div id="distanceBox"></div>
+    <div id="statusBox"></div>
+    <button id="darkModeToggle">Toggle Dark Mode</button>
+    <button id="snapshotButton">Take Snapshot</button>
+    <a id="downloadLink" style="display: none;"></a>
 
-  <script>
-    const KNOWN_WIDTH = 150.0; // cm
-    let FOCAL_LENGTH = 600; // Default, can be recalibrated
-    let distances = [];
+    <div id="settingsPanel" style="display: none; position: fixed; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); z-index: 1000;">
+        <h3 style="margin: 0 0 10px; color: black;">Settings</h3>
+        <label for="stopThreshold" style="color: black;">STOP Threshold (ft):</label>
+        <input type="number" id="stopThreshold" value="4" style="width: 60px; margin-bottom: 10px;"><br>
+        <label for="slowThreshold" style="color: black;">SLOW Threshold (ft):</label>
+        <input type="number" id="slowThreshold" value="15" style="width: 60px; margin-bottom: 10px;"><br>
+        <button id="saveSettingsButton" style="background: #4CAF50; color: #fff; border: none; border-radius: 5px; padding: 5px 10px; cursor: pointer;">Save</button>
+    </div>
+    <div id="settingsContainer" style="position: fixed; bottom: 20px; left: 20px; z-index: 1000;">
+        <button id="gearButton" style="background: #4CAF50; color: #fff; border: none; border-radius: 5px; padding: 10px 20px; cursor: pointer; font-size: 1em; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);">
+            ⚙️ Settings
+        </button>
+        <div id="settingsPanel" style="display: none; margin-top: 10px; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);">
+            <h3 style="margin: 0 0 10px;">Settings</h3>
+            <label for="stopThreshold">STOP Threshold (ft):</label>
+            <input type="number" id="stopThreshold" value="4" style="width: 60px; margin-bottom: 10px;"><br>
+            <label for="slowThreshold">SLOW Threshold (ft):</label>
+            <input type="number" id="slowThreshold" value="15" style="width: 60px; margin-bottom: 10px;"><br>
+            <button id="saveSettingsButton" style="background: #4CAF50; color: #fff; border: none; border-radius: 5px; padding: 5px 10px; cursor: pointer;">Save</button>
+        </div>
+    </div>
+    <script>
+        const KNOWN_WIDTH = 150.0; // cm
+        let FOCAL_LENGTH = 600; // Default, can be recalibrated
+        let distances = [];
 
-    function smoothDistance(newDistance) {
-      distances.push(newDistance);
-      if (distances.length > 10) distances.shift();
-      return distances.reduce((a, b) => a + b, 0) / distances.length;
-    }
+        function smoothDistance(newDistance) {
+            distances.push(newDistance);
+            if (distances.length > 10) distances.shift();
+            return distances.reduce((a, b) => a + b, 0) / distances.length;
+        }
 
-    function updateAlert(distanceFt) {
-      const alertBox = document.getElementById("alertBox");
-      if (distanceFt <= 10) {
-        alertBox.innerHTML = '<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/Stop_sign_light_red.svg/2048px-Stop_sign_light_red.svg.png" alt="STOP"><br><span style="color:red">STOP</span>';
-      } else if (distanceFt <= 15) {
-        alertBox.innerHTML = '<span style="color:orange; font-size: 6em">🟨<br>SLOW</span>';
-      } else {
-        alertBox.innerHTML = '<span style="color:green; font-size: 6em">🟩<br>GO</span>';
-      }
-    }
+        const saveSettingsButton = document.getElementById("saveSettingsButton");
+        const stopThresholdInput = document.getElementById("stopThreshold");
+        const slowThresholdInput = document.getElementById("slowThreshold");
 
-    async function run() {
-      const alertBox = document.getElementById("alertBox");
-      const statusBox = document.getElementById("statusBox");
-      const video = document.getElementById("video");
-      const canvas = document.getElementById("canvas");
-      const ctx = canvas.getContext("2d");
-      const distanceDisplay = document.getElementById("distance");
+        // Default thresholds
+        let stopThreshold = 4;
+        let slowThreshold = 15;
 
-      try {
-        alertBox.textContent = "Requesting camera access...";
-        statusBox.textContent = "Trying to access webcam...";
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-        await video.play();
-        alertBox.textContent = "Camera access granted. Loading detection model...";
-        statusBox.textContent = "Webcam running. Waiting for model...";
-      } catch (err) {
-        alertBox.textContent = "❌ Camera not found or permission denied.";
-        alertBox.style.color = "red";
-        statusBox.textContent = "Please ensure a camera is connected and allowed.";
-        return;
-      }
-
-      let model;
-      try {
-        model = await cocoSsd.load();
-        alertBox.textContent = "Model loaded. Starting detection...";
-        statusBox.textContent = "Model is ready. Detecting objects...";
-      } catch (err) {
-        alertBox.textContent = "❌ Failed to load detection model.";
-        alertBox.style.color = "red";
-        statusBox.textContent = "Could not load detection model.";
-        return;
-      }
-
-      function detectFrame() {
-        model.detect(video).then(predictions => {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(video, 0, 0);
-
-          let carDetected = false;
-
-          predictions.forEach(prediction => {
-            if ((prediction.class === "car" || prediction.class === "truck") && prediction.score > 0.6) {
-              carDetected = true;
-              const [x, y, width, height] = prediction.bbox;
-              ctx.strokeStyle = "blue";
-              ctx.lineWidth = 2;
-              ctx.strokeRect(x, y, width, height);
-              ctx.fillStyle = "blue";
-              ctx.fillText(prediction.class, x, y > 10 ? y - 5 : 10);
-
-              const distanceCm = (KNOWN_WIDTH * FOCAL_LENGTH) / width;
-              const distanceFt = distanceCm / 30.48;
-              const smoothed = smoothDistance(distanceFt);
-
-              distanceDisplay.textContent = `Distance: ${smoothed.toFixed(2)} ft`;
-              updateAlert(smoothed);
-              statusBox.textContent = "Car detected. Calculating distance...";
+        // Prevent negative numbers in the STOP and SLOW Threshold inputs
+        stopThresholdInput.addEventListener("input", () => {
+            if (stopThresholdInput.value < 0) {
+                stopThresholdInput.value = 0; // Reset to 0 if a negative number is entered
             }
-          });
-
-          if (!carDetected) {
-            alertBox.innerHTML = "🟦<br>Scanning for cars...";
-            alertBox.style.color = "#333";
-            distanceDisplay.textContent = "";
-            statusBox.textContent = "No car detected. Still scanning...";
-          }
-
-          requestAnimationFrame(detectFrame);
-        }).catch(err => {
-          alertBox.textContent = "❌ Detection failed.";
-          alertBox.style.color = "red";
-          statusBox.textContent = "Detection error occurred.";
         });
-      }
 
-      detectFrame();
-    }
+        slowThresholdInput.addEventListener("input", () => {
+            if (slowThresholdInput.value < 0) {
+                slowThresholdInput.value = 0; // Reset to 0 if a negative number is entered
+            }
+        });
 
-    run();
-  </script>
+        // Save button event listener
+        saveSettingsButton.addEventListener("click", () => {
+            stopThreshold = parseFloat(stopThresholdInput.value) || 4; // Default to 4 if invalid
+            slowThreshold = parseFloat(slowThresholdInput.value) || 15; // Default to 15 if invalid
+            alert(`Settings saved! STOP: ${stopThreshold} ft, SLOW: ${slowThreshold} ft`);
+        });
+
+        // Update the updateAlert function to use the customizable thresholds
+        function updateAlert(distanceFt) {
+            const alertBox = document.getElementById("alertBox");
+            const distanceBox = document.getElementById("distanceBox");
+            const body = document.body; // Reference to the body element
+            distanceBox.textContent = `Estimated Distance: ${distanceFt.toFixed(2)} ft`;
+
+            if (distanceFt <= stopThreshold) { // STOP condition
+                body.style.border = "10px solid red"; // Red border for STOP
+                alertBox.innerHTML = `
+                    <div style="display: flex; justify-content: center; gap: 20px;">
+                        <img src="https://www.bing.com/th?id=OPHS.5XG%2fMEaOBPK%2bnA474C474&o=5&pid=21.1&w=160&h=160&qlt=100&dpr=1.5&c=8&pcl=f5f5f5" alt="STOP" style="width:120px;height:120px;">
+                        <img src="https://www.bing.com/th?id=OPHS.5XG%2fMEaOBPK%2bnA474C474&o=5&pid=21.1&w=160&h=160&qlt=100&dpr=1.5&c=8&pcl=f5f5f5" alt="STOP" style="width:120px;height:120px;">
+                        <img src="https://www.bing.com/th?id=OPHS.5XG%2fMEaOBPK%2bnA474C474&o=5&pid=21.1&w=160&h=160&qlt=100&dpr=1.5&c=8&pcl=f5f5f5" alt="STOP" style="width:120px;height:120px;">
+                    </div>
+                    <br><span style="color:red; font-size: 3em;">STOP</span>`;
+            } else if (distanceFt <= slowThreshold) { // SLOW condition
+                body.style.border = "10px solid orange"; // Orange border for SLOW
+                alertBox.innerHTML = `
+                    <div style="display: flex; justify-content: center; gap: 20px;">
+                        <img src="https://th.bing.com/th/id/OIP.wO3_GJFRp-_Os0X65a4CKAHaKK?w=131&h=180&c=7&r=0&o=5&cb=iwc1&dpr=1.5&pid=1.7" alt="SLOW" style="width:80px;height:80px;">
+                        <img src="https://th.bing.com/th/id/OIP.wO3_GJFRp-_Os0X65a4CKAHaKK?w=131&h=180&c=7&r=0&o=5&cb=iwc1&dpr=1.5&pid=1.7" alt="SLOW" style="width:80px;height:80px;">
+                        <img src="https://th.bing.com/th/id/OIP.wO3_GJFRp-_Os0X65a4CKAHaKK?w=131&h=180&c=7&r=0&o=5&cb=iwc1&dpr=1.5&pid=1.7" alt="SLOW" style="width:80px;height:80px;">
+                    </div>
+                    <br><span style="color:orange; font-size: 3em;">SLOW</span>`;
+            } else { // GO condition
+                body.style.border = "10px solid green"; // Green border for GO
+                alertBox.innerHTML = `
+                    <div style="display: flex; justify-content: center; gap: 20px;">
+                        <span style="color:green; font-size: 3em;">⬆️</span>
+                        <span style="color:green; font-size: 3em;">⬆️</span>
+                        <span style="color:green; font-size: 3em;">⬆️</span>
+                    </div>
+                    <br><span style="color:green; font-size: 3em;">GO</span>`;
+            }
+        }   
+
+        async function run() {
+            const alertBox = document.getElementById("alertBox");
+            const statusBox = document.getElementById("statusBox");
+            const video = document.getElementById("video");
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+
+            try {
+                alertBox.textContent = "Requesting camera access...";
+                statusBox.textContent = "Trying to access webcam...";
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                alertBox.textContent = "Camera access granted. Loading detection model...";
+                statusBox.textContent = "Webcam running. Waiting for model...";
+            } catch (err) {
+                alertBox.textContent = "❌ Camera not found or permission denied.";
+                alertBox.style.color = "red";
+                statusBox.textContent = "Please ensure a camera is connected and allowed.";
+                return;
+            }
+
+            let model;
+            try {
+                model = await cocoSsd.load();
+                alertBox.textContent = "Model loaded. Starting detection...";
+                statusBox.textContent = "Model is ready. Detecting objects...";
+            } catch (err) {
+                alertBox.textContent = "❌ Failed to load detection model.";
+                alertBox.style.color = "red";
+                statusBox.textContent = "Could not load detection model.";
+                return;
+            }
+
+            function detectFrame() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                model.detect(video).then(predictions => {
+                    predictions.forEach(prediction => {
+                        if (prediction.score > 0.6) {
+                            const [x, y, width, height] = prediction.bbox;
+
+                            ctx.fillStyle = "red";
+                            ctx.fillText(
+                                `${prediction.class} (${Math.round(prediction.score * 100)}%)`,
+                                x,
+                                y > 10 ? y - 5 : 10
+                            );
+
+                            if (prediction.class === "car" || prediction.class === "truck") {
+                                const distanceCm = (KNOWN_WIDTH * FOCAL_LENGTH) / width;
+                                const distanceFt = distanceCm / 30.48;
+                                const smoothed = smoothDistance(distanceFt);
+                                updateAlert(smoothed);
+                            }
+                        }
+                    });
+
+                    requestAnimationFrame(detectFrame);
+                });
+            }
+
+            detectFrame();
+        }
+
+        const darkModeToggle = document.getElementById("darkModeToggle");
+
+        // Automatically set dark or light mode based on the device's time
+        const currentHour = new Date().getHours();
+        if (currentHour >= 18 || currentHour < 6) {
+            // Between 6 PM and 6 AM, enable dark mode
+            document.body.classList.add("dark-mode");
+            darkModeToggle.textContent = "Toggle Light Mode"; // Set initial button text
+            localStorage.setItem("dark-mode", "enabled"); // Save preference
+        } else {
+            // Between 6 AM and 6 PM, enable light mode
+            document.body.classList.remove("dark-mode");
+            darkModeToggle.textContent = "Toggle Dark Mode"; // Set initial button text
+            localStorage.setItem("dark-mode", "disabled"); // Save preference
+        }
+
+        // Add event listener for the toggle button
+        darkModeToggle.addEventListener("click", () => {
+            document.body.classList.toggle("dark-mode"); // Toggle the dark-mode class
+
+            if (document.body.classList.contains("dark-mode")) {
+                darkModeToggle.textContent = "Toggle Light Mode"; // Update button text
+                localStorage.setItem("dark-mode", "enabled"); // Save preference
+            } else {
+                darkModeToggle.textContent = "Toggle Dark Mode"; // Update button text
+                localStorage.setItem("dark-mode", "disabled"); // Save preference
+            }
+        });
+
+        const snapshotButton = document.getElementById("snapshotButton");
+
+        snapshotButton.addEventListener("click", () => {
+            // Create a temporary canvas to capture the current frame
+            const snapshotCanvas = document.createElement("canvas");
+            const snapshotCtx = snapshotCanvas.getContext("2d");
+
+            // Set the canvas size to match the video feed
+            snapshotCanvas.width = canvas.width;
+            snapshotCanvas.height = canvas.height;
+
+            // Draw the current frame from the main canvas onto the snapshot canvas
+            snapshotCtx.drawImage(canvas, 0, 0);
+
+            // Add distance and time information to the snapshot
+            const distanceText = document.getElementById("distanceBox").textContent || "Distance: N/A";
+            const currentTime = new Date().toLocaleString(); // Get the current date and time
+
+            snapshotCtx.font = "20px Arial";
+            snapshotCtx.fillStyle = "white";
+            snapshotCtx.fillText(distanceText, 10, 30); // Draw distance at the top-left corner
+            snapshotCtx.fillText(`Time: ${currentTime}`, 10, 60); // Draw time below the distance
+
+            // Convert the snapshot canvas to a data URL
+            const snapshotDataUrl = snapshotCanvas.toDataURL("image/png");
+
+            // Trigger the download
+            const downloadLink = document.createElement("a");
+            downloadLink.href = snapshotDataUrl;
+            downloadLink.download = "snapshot.png";
+            downloadLink.click(); // Simulate a click to download the snapshot
+        });
+
+        const gearButton = document.getElementById("gearButton");
+        const settingsPanel = document.getElementById("settingsPanel");
+
+        gearButton.addEventListener("click", () => {
+            // Toggle the visibility of the settings panel
+            if (settingsPanel.style.display === "none" || settingsPanel.style.display === "") {
+                settingsPanel.style.display = "block"; // Show the panel
+            } else {
+                settingsPanel.style.display = "none"; // Hide the panel
+            }
+        });
+
+        // Mobile detection function
+        function isMobile() {
+            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        }
+
+        // Auto-run detection on mobile devices
+        if (isMobile()) {
+            document.addEventListener("DOMContentLoaded", () => {
+                run();
+            });
+        } else {
+            // On desktop, run() is already called at the end of the script
+        }
+
+        // Optionally, you can hide the "Take Snapshot" and "Settings" buttons on mobile for a cleaner UI:
+        if (isMobile()) {
+            document.getElementById("snapshotButton").style.display = "none";
+            document.getElementById("gearButton").style.display = "none";
+        }
+
+        run();
+    </script>
 </body>
 </html>
