@@ -56,6 +56,23 @@
       padding: 15px;
       margin-top: 10px;
       border-radius: 5px;
+      position: relative;
+    }
+
+    .delete-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background-color: #ff4d4d;
+      border: none;
+      padding: 5px 10px;
+      color: white;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .delete-btn:hover {
+      background-color: #ff6666;
     }
 
     footer {
@@ -98,12 +115,25 @@
       const description = document.getElementById('description').value.trim();
       if (!title || !description) return;
 
-      const entry = { title, description, date: new Date().toLocaleString() };
+      const entry = {
+        title,
+        description,
+        date: new Date().toLocaleString()
+      };
+
       const entries = JSON.parse(localStorage.getItem('moonEntries')) || [];
       entries.unshift(entry);
       localStorage.setItem('moonEntries', JSON.stringify(entries));
+
       document.getElementById('title').value = '';
       document.getElementById('description').value = '';
+      showEntries();
+    }
+
+    function deleteEntry(index) {
+      const entries = JSON.parse(localStorage.getItem('moonEntries')) || [];
+      entries.splice(index, 1);
+      localStorage.setItem('moonEntries', JSON.stringify(entries));
       showEntries();
     }
 
@@ -111,10 +141,16 @@
       const entries = JSON.parse(localStorage.getItem('moonEntries')) || [];
       const container = document.getElementById('entry-list');
       container.innerHTML = '';
-      entries.forEach((entry) => {
+
+      entries.forEach((entry, index) => {
         const div = document.createElement('div');
         div.className = 'entry';
-        div.innerHTML = `<h3>${entry.title}</h3><small>${entry.date}</small><p>${entry.description}</p>`;
+        div.innerHTML = `
+          <h3>${entry.title}</h3>
+          <small>${entry.date}</small>
+          <p>${entry.description}</p>
+          <button class="delete-btn" onclick="deleteEntry(${index})">Delete</button>
+        `;
         container.appendChild(div);
       });
     }
